@@ -1,0 +1,107 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  TF_VERSION: '1.12.2'
+
+stages:
+
+# -----------------------------------
+# Terraform Validate
+# -----------------------------------
+
+- stage: TerraformValidate
+  displayName: Terraform Validate
+
+  jobs:
+  - job: Validate
+
+    steps:
+
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: $(TF_VERSION)
+
+    - script: |
+        cd terraform
+        terraform init
+        terraform validate
+      displayName: Terraform Validate
+
+# -----------------------------------
+# Terraform Plan
+# -----------------------------------
+
+- stage: TerraformPlan
+
+  dependsOn: TerraformValidate
+
+  jobs:
+  - job: Plan
+
+    steps:
+
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: $(TF_VERSION)
+
+    - script: |
+        cd terraform
+        terraform init
+        terraform plan -out=tfplan
+      displayName: Terraform Plan
+
+# -----------------------------------
+# Terraform Apply
+# -----------------------------------
+
+- stage: TerraformApply
+
+  dependsOn: TerraformPlan
+
+  jobs:
+  - deployment: Apply
+
+    environment: terraform-apply
+
+    strategy:
+      runOnce:
+        deploy:
+
+          steps:
+
+          - task: TerraformInstaller@1
+            inputs:
+              terraformVersion: $(TF_VERSION)
+
+          - script: |
+              cd terraform
+              terraform init
+              terraform apply -auto-approve
+            displayName: Terraform Apply
+
+# -----------------------------------
+# Deploy Application
+# -----------------------------------
+
+- stage: DeployApp
+
+  dependsOn: TerraformApply
+
+  jobs:
+  - job: Deploy
+
+    steps:
+
+    - publish: app
+      artifact: webapp
+
+    - task: AzureWebApp@1
+      inputs:
+        azureSubscription: 'Azure-Service-Connection'
+        appType: 'webApp'
+        appName: 'rahul-poc17-webapp-demo'
+        package: '$(Pipeline.Workspace)/webapp'

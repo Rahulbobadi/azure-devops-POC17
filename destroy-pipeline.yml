@@ -1,0 +1,59 @@
+trigger: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  TF_VERSION: '1.12.2'
+
+stages:
+
+# -----------------------------------
+# Destroy Plan
+# -----------------------------------
+
+- stage: DestroyPlan
+
+  jobs:
+  - job: PlanDestroy
+
+    steps:
+
+    - task: TerraformInstaller@1
+      inputs:
+        terraformVersion: $(TF_VERSION)
+
+    - script: |
+        cd terraform
+        terraform init
+        terraform plan -destroy -out=destroy.tfplan
+      displayName: Terraform Destroy Plan
+
+# -----------------------------------
+# Manual Approval
+# -----------------------------------
+
+- stage: Destroy
+
+  dependsOn: DestroyPlan
+
+  jobs:
+  - deployment: DestroyInfra
+
+    environment: terraform-destroy
+
+    strategy:
+      runOnce:
+        deploy:
+
+          steps:
+
+          - task: TerraformInstaller@1
+            inputs:
+              terraformVersion: $(TF_VERSION)
+
+          - script: |
+              cd terraform
+              terraform init
+              terraform destroy -auto-approve
+            displayName: Terraform Destroy
